@@ -1,0 +1,1418 @@
+{
+ "source": "https://claude.ai/artifact/9qNZkZVMG6qk9i8UENv4tC",
+ "title": "Mantis DB ERD",
+ "database": "MySQL (MantisBT). 실제 테이블명에는 보통 mantis_ 접두사와 _table 접미사가 붙을 수 있음.",
+ "conventions": [
+  "DB에 FK 제약이 없음. 관계는 컬럼명 기반 논리 추정.",
+  "ref_kind=fk: <table>_id 형태로 대상 id를 참조. ref_kind=logical: 이름 규칙 밖이거나 문자열 값으로 참조.",
+  "FK 값 0은 '없음/전역'을 의미하는 경우가 많음 (NULL 대신 0).",
+  "날짜 컬럼은 Unix time 정수."
+ ],
+ "incomplete": [
+  "custom_field (컬럼 일부만 확보)",
+  "커스텀 필드 그룹의 나머지 테이블 (예: custom_field_project, custom_field_string 등 — 미확보)",
+  "설정·시스템 그룹 전체 (미확보)"
+ ],
+ "tables": [
+  {
+   "name": "bug",
+   "group": "이슈",
+   "label_ko": "이슈(버그) 본문",
+   "description": "이슈 1건의 상태·담당자·분류 등 메타정보. 긴 텍스트는 bug_text에 따로 저장.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "이슈 번호",
+     "pk": true
+    },
+    {
+     "name": "project_id",
+     "description": "소속 프로젝트",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "reporter_id",
+     "description": "보고자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "handler_id",
+     "description": "담당자 (0 = 미할당)",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "duplicate_id",
+     "description": "중복 원본 이슈 (0 = 중복 아님)",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "bug_text_id",
+     "description": "설명·재현절차 텍스트",
+     "references": "bug_text",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "category_id",
+     "description": "이슈 분류",
+     "references": "category",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "profile_id",
+     "description": "보고 시 선택한 환경 프로필",
+     "references": "user_profile",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "priority",
+     "description": "우선순위 코드 (10 없음 ~ 60 즉시)"
+    },
+    {
+     "name": "severity",
+     "description": "심각도 코드 (10 기능 ~ 80 블록)"
+    },
+    {
+     "name": "reproducibility",
+     "description": "재현 빈도 코드 (10 항상 ~ 100 해당없음)"
+    },
+    {
+     "name": "status",
+     "description": "상태 코드 (10 새 이슈, 50 할당됨, 80 해결됨, 90 종료 등)"
+    },
+    {
+     "name": "resolution",
+     "description": "해결 결과 코드 (10 미해결, 20 수정됨, 60 중복 등)"
+    },
+    {
+     "name": "projection",
+     "description": "예상 작업 규모 코드"
+    },
+    {
+     "name": "eta",
+     "description": "예상 소요 시간 코드"
+    },
+    {
+     "name": "summary",
+     "description": "요약(제목)"
+    },
+    {
+     "name": "view_state",
+     "description": "공개 범위 (10 공개, 50 비공개)"
+    },
+    {
+     "name": "version",
+     "description": "발견 버전 (project_version.version 문자열)",
+     "references": "project_version",
+     "ref_kind": "logical"
+    },
+    {
+     "name": "fixed_in_version",
+     "description": "수정된 버전 (문자열)",
+     "references": "project_version",
+     "ref_kind": "logical"
+    },
+    {
+     "name": "target_version",
+     "description": "목표 버전 (문자열)",
+     "references": "project_version",
+     "ref_kind": "logical"
+    },
+    {
+     "name": "build",
+     "description": "빌드 번호"
+    },
+    {
+     "name": "platform",
+     "description": "플랫폼"
+    },
+    {
+     "name": "os",
+     "description": "운영체제"
+    },
+    {
+     "name": "os_build",
+     "description": "OS 버전"
+    },
+    {
+     "name": "sponsorship_total",
+     "description": "후원 금액 합계"
+    },
+    {
+     "name": "sticky",
+     "description": "목록 상단 고정 여부"
+    },
+    {
+     "name": "date_submitted",
+     "description": "등록 일시 (Unix time)"
+    },
+    {
+     "name": "last_updated",
+     "description": "최종 수정 일시 (Unix time)"
+    },
+    {
+     "name": "due_date",
+     "description": "마감일 (Unix time)"
+    }
+   ]
+  },
+  {
+   "name": "bug_text",
+   "group": "이슈",
+   "label_ko": "이슈 상세 텍스트",
+   "description": "bug 본문의 긴 텍스트. bug.bug_text_id로 1:1 연결.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "텍스트 번호",
+     "pk": true
+    },
+    {
+     "name": "description",
+     "description": "설명"
+    },
+    {
+     "name": "steps_to_reproduce",
+     "description": "재현 절차"
+    },
+    {
+     "name": "additional_information",
+     "description": "추가 정보"
+    }
+   ]
+  },
+  {
+   "name": "bug_relationship",
+   "group": "이슈",
+   "label_ko": "이슈 간 관계",
+   "description": "두 이슈 사이의 중복·관련·상하위 관계.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "관계 번호",
+     "pk": true
+    },
+    {
+     "name": "source_bug_id",
+     "description": "기준 이슈",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "destination_bug_id",
+     "description": "대상 이슈",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "relationship_type",
+     "description": "관계 유형 (0 중복, 1 관련, 2 상위→하위 종속)"
+    }
+   ]
+  },
+  {
+   "name": "bug_file",
+   "group": "이슈",
+   "label_ko": "이슈 첨부파일",
+   "description": "이슈에 첨부된 파일. 저장 방식에 따라 디스크 경로나 DB 바이너리(content) 사용.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "첨부 번호",
+     "pk": true
+    },
+    {
+     "name": "bug_id",
+     "description": "대상 이슈",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "업로더",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "title",
+     "description": "제목"
+    },
+    {
+     "name": "description",
+     "description": "설명"
+    },
+    {
+     "name": "diskfile",
+     "description": "서버에 저장된 파일명"
+    },
+    {
+     "name": "filename",
+     "description": "원본 파일명"
+    },
+    {
+     "name": "folder",
+     "description": "저장 경로"
+    },
+    {
+     "name": "filesize",
+     "description": "파일 크기 (byte)"
+    },
+    {
+     "name": "file_type",
+     "description": "MIME 타입"
+    },
+    {
+     "name": "content",
+     "description": "DB 저장 시 파일 바이너리"
+    },
+    {
+     "name": "date_added",
+     "description": "업로드 일시"
+    }
+   ]
+  },
+  {
+   "name": "bug_monitor",
+   "group": "이슈",
+   "label_ko": "이슈 모니터링(구독)",
+   "description": "사용자가 알림을 받기 위해 구독한 이슈 목록. 복합 PK.",
+   "columns": [
+    {
+     "name": "user_id",
+     "description": "구독자",
+     "pk": true,
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "bug_id",
+     "description": "구독 이슈",
+     "pk": true,
+     "references": "bug",
+     "ref_kind": "fk"
+    }
+   ]
+  },
+  {
+   "name": "sponsorship",
+   "group": "이슈",
+   "label_ko": "이슈 후원",
+   "description": "이슈 해결을 위한 후원 금액 기록. 대부분의 사내 설치에서는 미사용.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "후원 번호",
+     "pk": true
+    },
+    {
+     "name": "bug_id",
+     "description": "대상 이슈",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "후원자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "amount",
+     "description": "금액"
+    },
+    {
+     "name": "logo",
+     "description": "로고"
+    },
+    {
+     "name": "url",
+     "description": "링크"
+    },
+    {
+     "name": "paid",
+     "description": "지불 상태"
+    },
+    {
+     "name": "date_submitted",
+     "description": "등록 일시"
+    },
+    {
+     "name": "last_updated",
+     "description": "수정 일시"
+    }
+   ]
+  },
+  {
+   "name": "bug_tag",
+   "group": "이슈",
+   "label_ko": "이슈-태그 연결",
+   "description": "이슈와 태그의 N:M 연결 테이블.",
+   "columns": [
+    {
+     "name": "bug_id",
+     "description": "이슈",
+     "pk": true,
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "tag_id",
+     "description": "태그",
+     "pk": true,
+     "references": "tag",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "태그를 붙인 사용자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "date_attached",
+     "description": "연결 일시"
+    }
+   ]
+  },
+  {
+   "name": "tag",
+   "group": "이슈",
+   "label_ko": "태그 정의",
+   "description": "이슈에 붙이는 태그 마스터.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "태그 번호",
+     "pk": true
+    },
+    {
+     "name": "user_id",
+     "description": "생성자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "name",
+     "description": "태그명"
+    },
+    {
+     "name": "description",
+     "description": "설명"
+    },
+    {
+     "name": "date_created",
+     "description": "생성 일시"
+    },
+    {
+     "name": "date_updated",
+     "description": "수정 일시"
+    }
+   ]
+  },
+  {
+   "name": "bugnote",
+   "group": "노트·이력",
+   "label_ko": "이슈 댓글(노트)",
+   "description": "이슈에 달린 노트. 본문은 bugnote_text에 따로 저장.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "노트 번호",
+     "pk": true
+    },
+    {
+     "name": "bug_id",
+     "description": "대상 이슈",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "reporter_id",
+     "description": "작성자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "bugnote_text_id",
+     "description": "노트 본문",
+     "references": "bugnote_text",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "view_state",
+     "description": "공개 범위 (10 공개, 50 비공개)"
+    },
+    {
+     "name": "note_type",
+     "description": "노트 유형 (0 일반, 1 리마인더, 2 시간 기록)"
+    },
+    {
+     "name": "note_attr",
+     "description": "부가 속성 (리마인더 수신자 등)"
+    },
+    {
+     "name": "time_tracking",
+     "description": "작업 시간 (분)"
+    },
+    {
+     "name": "date_submitted",
+     "description": "작성 일시"
+    },
+    {
+     "name": "last_modified",
+     "description": "수정 일시"
+    }
+   ]
+  },
+  {
+   "name": "bugnote_text",
+   "group": "노트·이력",
+   "label_ko": "노트 본문",
+   "description": "bugnote의 본문 텍스트. 1:1 연결.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "본문 번호",
+     "pk": true
+    },
+    {
+     "name": "note",
+     "description": "노트 내용"
+    }
+   ]
+  },
+  {
+   "name": "bug_history",
+   "group": "노트·이력",
+   "label_ko": "이슈 변경 이력",
+   "description": "이슈 필드 변경, 노트 추가, 첨부 등 모든 변경 기록.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "이력 번호",
+     "pk": true
+    },
+    {
+     "name": "bug_id",
+     "description": "대상 이슈",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "변경한 사용자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "field_name",
+     "description": "변경된 필드명"
+    },
+    {
+     "name": "old_value",
+     "description": "이전 값"
+    },
+    {
+     "name": "new_value",
+     "description": "새 값"
+    },
+    {
+     "name": "type",
+     "description": "이력 유형 (0 필드 변경, 1 신규 이슈, 2 노트 추가 등)"
+    },
+    {
+     "name": "date_modified",
+     "description": "변경 일시"
+    }
+   ]
+  },
+  {
+   "name": "bug_revision",
+   "group": "노트·이력",
+   "label_ko": "이슈·노트 수정본",
+   "description": "이슈 설명이나 노트를 수정할 때 이전 내용을 보관.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "수정본 번호",
+     "pk": true
+    },
+    {
+     "name": "bug_id",
+     "description": "대상 이슈",
+     "references": "bug",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "bugnote_id",
+     "description": "대상 노트 (0 = 이슈 본문 수정)",
+     "references": "bugnote",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "수정한 사용자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "type",
+     "description": "수정 대상 (설명, 재현절차, 추가정보, 노트)"
+    },
+    {
+     "name": "value",
+     "description": "수정 전 내용"
+    },
+    {
+     "name": "timestamp",
+     "description": "수정 일시"
+    }
+   ]
+  },
+  {
+   "name": "project",
+   "group": "프로젝트",
+   "label_ko": "프로젝트",
+   "description": "이슈가 속하는 프로젝트. 하위 프로젝트 구조는 project_hierarchy에 있음.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "프로젝트 번호",
+     "pk": true
+    },
+    {
+     "name": "name",
+     "description": "프로젝트명"
+    },
+    {
+     "name": "status",
+     "description": "개발 상태 코드 (10 개발 중 ~ 70 폐기)"
+    },
+    {
+     "name": "enabled",
+     "description": "사용 여부"
+    },
+    {
+     "name": "view_state",
+     "description": "공개 범위"
+    },
+    {
+     "name": "access_min",
+     "description": "최소 접근 권한 레벨"
+    },
+    {
+     "name": "file_path",
+     "description": "첨부 저장 경로"
+    },
+    {
+     "name": "description",
+     "description": "설명"
+    },
+    {
+     "name": "category_id",
+     "description": "기본 분류",
+     "references": "category",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "inherit_global",
+     "description": "전역 분류 상속 여부"
+    }
+   ]
+  },
+  {
+   "name": "category",
+   "group": "프로젝트",
+   "label_ko": "이슈 분류",
+   "description": "프로젝트별 이슈 분류(카테고리). project_id가 0이면 전체 프로젝트 공용.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "분류 번호",
+     "pk": true
+    },
+    {
+     "name": "project_id",
+     "description": "소속 프로젝트 (0 = 전역)",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "기본 담당자 (자동 할당)",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "name",
+     "description": "분류명"
+    },
+    {
+     "name": "status",
+     "description": "상태"
+    }
+   ]
+  },
+  {
+   "name": "project_hierarchy",
+   "group": "프로젝트",
+   "label_ko": "프로젝트 상하위",
+   "description": "프로젝트의 부모-자식 관계.",
+   "columns": [
+    {
+     "name": "child_id",
+     "description": "하위 프로젝트",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "parent_id",
+     "description": "상위 프로젝트",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "inherit_parent",
+     "description": "상위 설정 상속 여부"
+    }
+   ]
+  },
+  {
+   "name": "project_version",
+   "group": "프로젝트",
+   "label_ko": "프로젝트 버전",
+   "description": "릴리스 버전 목록. bug의 version 계열 컬럼이 id가 아닌 버전명 문자열로 참조.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "버전 번호",
+     "pk": true
+    },
+    {
+     "name": "project_id",
+     "description": "소속 프로젝트",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "version",
+     "description": "버전명"
+    },
+    {
+     "name": "description",
+     "description": "설명"
+    },
+    {
+     "name": "released",
+     "description": "릴리스 여부"
+    },
+    {
+     "name": "obsolete",
+     "description": "폐기 여부"
+    },
+    {
+     "name": "date_order",
+     "description": "릴리스 일자 (정렬 기준)"
+    }
+   ]
+  },
+  {
+   "name": "project_file",
+   "group": "프로젝트",
+   "label_ko": "프로젝트 문서 파일",
+   "description": "프로젝트 단위로 올린 문서 파일.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "파일 번호",
+     "pk": true
+    },
+    {
+     "name": "project_id",
+     "description": "소속 프로젝트",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "업로더",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "title",
+     "description": "제목"
+    },
+    {
+     "name": "description",
+     "description": "설명"
+    },
+    {
+     "name": "diskfile",
+     "description": "서버 저장 파일명"
+    },
+    {
+     "name": "filename",
+     "description": "원본 파일명"
+    },
+    {
+     "name": "folder",
+     "description": "저장 경로"
+    },
+    {
+     "name": "filesize",
+     "description": "크기"
+    },
+    {
+     "name": "file_type",
+     "description": "MIME 타입"
+    },
+    {
+     "name": "content",
+     "description": "DB 저장 시 바이너리"
+    },
+    {
+     "name": "date_added",
+     "description": "업로드 일시"
+    }
+   ]
+  },
+  {
+   "name": "news",
+   "group": "프로젝트",
+   "label_ko": "공지·뉴스",
+   "description": "프로젝트 공지사항.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "공지 번호",
+     "pk": true
+    },
+    {
+     "name": "project_id",
+     "description": "대상 프로젝트 (0 = 전체)",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "poster_id",
+     "description": "작성자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "view_state",
+     "description": "공개 범위"
+    },
+    {
+     "name": "announcement",
+     "description": "상단 고정 공지 여부"
+    },
+    {
+     "name": "headline",
+     "description": "제목"
+    },
+    {
+     "name": "body",
+     "description": "본문"
+    },
+    {
+     "name": "date_posted",
+     "description": "작성 일시"
+    },
+    {
+     "name": "last_modified",
+     "description": "수정 일시"
+    }
+   ]
+  },
+  {
+   "name": "project_user_list",
+   "group": "프로젝트",
+   "label_ko": "프로젝트별 사용자 권한",
+   "description": "사용자가 특정 프로젝트에서 갖는 권한. 전역 권한(user.access_level)보다 우선.",
+   "columns": [
+    {
+     "name": "project_id",
+     "description": "프로젝트",
+     "pk": true,
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "user_id",
+     "description": "사용자",
+     "pk": true,
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "access_level",
+     "description": "프로젝트 내 권한 레벨 (10 뷰어 ~ 90 관리자)"
+    }
+   ]
+  },
+  {
+   "name": "user",
+   "group": "사용자·조직",
+   "label_ko": "사용자 계정",
+   "description": "로그인 계정과 전역 권한. team_id는 사내 추가 컬럼으로 보임.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "사용자 번호",
+     "pk": true
+    },
+    {
+     "name": "username",
+     "description": "로그인 ID"
+    },
+    {
+     "name": "realname",
+     "description": "실명"
+    },
+    {
+     "name": "email",
+     "description": "이메일"
+    },
+    {
+     "name": "password",
+     "description": "비밀번호 해시"
+    },
+    {
+     "name": "enabled",
+     "description": "사용 여부"
+    },
+    {
+     "name": "protected",
+     "description": "보호 계정 (설정 변경 불가)"
+    },
+    {
+     "name": "access_level",
+     "description": "전역 권한 (10 뷰어, 25 보고자, 40 갱신자, 55 개발자, 70 매니저, 90 관리자)"
+    },
+    {
+     "name": "login_count",
+     "description": "로그인 횟수"
+    },
+    {
+     "name": "failed_login_count",
+     "description": "로그인 실패 횟수"
+    },
+    {
+     "name": "lost_password_request_count",
+     "description": "비밀번호 찾기 요청 횟수"
+    },
+    {
+     "name": "cookie_string",
+     "description": "로그인 유지용 쿠키 토큰"
+    },
+    {
+     "name": "last_visit",
+     "description": "최근 접속 일시"
+    },
+    {
+     "name": "date_created",
+     "description": "가입 일시"
+    },
+    {
+     "name": "team_id",
+     "description": "소속 팀 (사내 커스텀)",
+     "references": "user_team",
+     "ref_kind": "fk"
+    }
+   ]
+  },
+  {
+   "name": "user_profile",
+   "group": "사용자·조직",
+   "label_ko": "사용자 환경 프로필",
+   "description": "이슈 보고 시 고르는 플랫폼·OS 조합. user_id가 0이면 전역 프로필.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "프로필 번호",
+     "pk": true
+    },
+    {
+     "name": "user_id",
+     "description": "소유자 (0 = 전역)",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "platform",
+     "description": "플랫폼"
+    },
+    {
+     "name": "os",
+     "description": "운영체제"
+    },
+    {
+     "name": "os_build",
+     "description": "OS 버전"
+    },
+    {
+     "name": "description",
+     "description": "설명"
+    }
+   ]
+  },
+  {
+   "name": "user_pref",
+   "group": "사용자·조직",
+   "label_ko": "사용자 환경설정",
+   "description": "기본 프로젝트, 알림 메일 수신 여부, 언어 등 개인 설정. 프로젝트별로 따로 둘 수 있음.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "설정 번호",
+     "pk": true
+    },
+    {
+     "name": "user_id",
+     "description": "사용자",
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "project_id",
+     "description": "적용 프로젝트 (0 = 기본)",
+     "references": "project",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "default_project",
+     "description": "로그인 후 기본 프로젝트",
+     "references": "project",
+     "ref_kind": "logical"
+    },
+    {
+     "name": "default_profile",
+     "description": "기본 환경 프로필",
+     "references": "user_profile",
+     "ref_kind": "logical"
+    },
+    {
+     "name": "refresh_delay",
+     "description": "목록 자동 새로고침 간격 (분)"
+    },
+    {
+     "name": "redirect_delay",
+     "description": "저장 후 이동 대기 (초)"
+    },
+    {
+     "name": "bugnote_order",
+     "description": "노트 정렬 (ASC/DESC)"
+    },
+    {
+     "name": "email_on_*",
+     "description": "상태별 알림 메일 수신 여부와 최소 심각도 (여러 컬럼을 묶어 표기)"
+    },
+    {
+     "name": "language",
+     "description": "표시 언어"
+    }
+   ]
+  },
+  {
+   "name": "user_print_pref",
+   "group": "사용자·조직",
+   "label_ko": "인쇄 설정",
+   "description": "이슈 인쇄 시 출력할 필드 선택.",
+   "columns": [
+    {
+     "name": "user_id",
+     "description": "사용자",
+     "pk": true,
+     "references": "user",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "print_pref",
+     "description": "출력 필드 선택값"
+    }
+   ]
+  },
+  {
+   "name": "tokens",
+   "group": "사용자·조직",
+   "label_ko": "임시 토큰",
+   "description": "비밀번호 재설정, 최근 본 이슈, 필터 임시값 등. owner 컬럼이 user를 가리킴.",
+   "columns": [
+    {
+     "name": "id",
+     "description": "토큰 번호",
+     "pk": true
+    },
+    {
+     "name": "owner",
+     "description": "소유 사용자 (컬럼명 규칙 밖)",
+     "references": "user",
+     "ref_kind": "logical"
+    },
+    {
+     "name": "type",
+     "description": "토큰 유형"
+    },
+    {
+     "name": "value",
+     "description": "토큰 값"
+    },
+    {
+     "name": "timestamp",
+     "description": "생성 일시"
+    },
+    {
+     "name": "expiry",
+     "description": "만료 일시"
+    }
+   ]
+  },
+  {
+   "name": "user_team",
+   "group": "사용자·조직",
+   "label_ko": "팀 (사내 커스텀)",
+   "description": "Mantis 표준에 없는 사내 추가 테이블. 컬럼명으로 추정.",
+   "columns": [
+    {
+     "name": "team_id",
+     "description": "팀 번호 (추정)",
+     "pk": true
+    },
+    {
+     "name": "dept_id",
+     "description": "소속 부서",
+     "references": "user_dept",
+     "ref_kind": "fk"
+    },
+    {
+     "name": "…",
+     "description": "나머지 컬럼은 실제 스키마 확인 필요"
+    }
+   ]
+  },
+  {
+   "name": "user_dept",
+   "group": "사용자·조직",
+   "label_ko": "부서 (사내 커스텀)",
+   "description": "Mantis 표준에 없는 사내 추가 테이블. 컬럼명으로 추정.",
+   "columns": [
+    {
+     "name": "dept_id",
+     "description": "부서 번호 (추정)",
+     "pk": true
+    },
+    {
+     "name": "…",
+     "description": "나머지 컬럼은 실제 스키마 확인 필요"
+    }
+   ]
+  },
+  {
+   "name": "custom_field",
+   "group": "커스텀 필드",
+   "label_ko": "커스텀 필드 정의",
+   "description": "관리자가 추가한 이슈 입력 항목의 정의. (원본에서 일부 컬럼만 확보됨)",
+   "columns": [
+    {
+     "name": "id",
+     "description": "필드 번호",
+     "pk": true
+    },
+    {
+     "name": "name",
+     "description": "필드명"
+    },
+    {
+     "name": "type",
+     "description": "필드 유형 (0 문자열, 1 숫자, 3 목록, 6 다중선택, 8 날짜 등)"
+    },
+    {
+     "name": "possible_values",
+     "description": "선택지 (| 구분)"
+    },
+    {
+     "name": "default_value",
+     "description": "기본값"
+    },
+    {
+     "name": "valid_regexp",
+     "description": "입력 검증 정규식"
+    },
+    {
+     "name": "access_level_r",
+     "description": "읽기 권한 레벨"
+    },
+    {
+     "name": "access_level_rw",
+     "description": "쓰기 권한 레벨"
+    },
+    {
+     "name": "…",
+     "description": "이후 컬럼은 원본에서 확보 못 함"
+    }
+   ]
+  }
+ ],
+ "relationships": [
+  {
+   "from": "bug.project_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug.reporter_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug.handler_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug.duplicate_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug.bug_text_id",
+   "to": "bug_text.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug.category_id",
+   "to": "category.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug.profile_id",
+   "to": "user_profile.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug.version",
+   "to": "project_version.version",
+   "kind": "logical"
+  },
+  {
+   "from": "bug.fixed_in_version",
+   "to": "project_version.version",
+   "kind": "logical"
+  },
+  {
+   "from": "bug.target_version",
+   "to": "project_version.version",
+   "kind": "logical"
+  },
+  {
+   "from": "bug_relationship.source_bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_relationship.destination_bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_file.bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_file.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_monitor.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_monitor.bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "sponsorship.bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "sponsorship.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_tag.bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_tag.tag_id",
+   "to": "tag.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_tag.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "tag.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bugnote.bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bugnote.reporter_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bugnote.bugnote_text_id",
+   "to": "bugnote_text.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_history.bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_history.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_revision.bug_id",
+   "to": "bug.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_revision.bugnote_id",
+   "to": "bugnote.id",
+   "kind": "fk"
+  },
+  {
+   "from": "bug_revision.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project.category_id",
+   "to": "category.id",
+   "kind": "fk"
+  },
+  {
+   "from": "category.project_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "category.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project_hierarchy.child_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project_hierarchy.parent_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project_version.project_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project_file.project_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project_file.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "news.project_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "news.poster_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project_user_list.project_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "project_user_list.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "user.team_id",
+   "to": "user_team.team_id",
+   "kind": "fk"
+  },
+  {
+   "from": "user_profile.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "user_pref.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "user_pref.project_id",
+   "to": "project.id",
+   "kind": "fk"
+  },
+  {
+   "from": "user_pref.default_project",
+   "to": "project.id",
+   "kind": "logical"
+  },
+  {
+   "from": "user_pref.default_profile",
+   "to": "user_profile.id",
+   "kind": "logical"
+  },
+  {
+   "from": "user_print_pref.user_id",
+   "to": "user.id",
+   "kind": "fk"
+  },
+  {
+   "from": "tokens.owner",
+   "to": "user.id",
+   "kind": "logical"
+  },
+  {
+   "from": "user_team.dept_id",
+   "to": "user_dept.dept_id",
+   "kind": "fk"
+  }
+ ]
+}

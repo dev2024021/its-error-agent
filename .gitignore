@@ -1,0 +1,12 @@
+# 가상환경 (requirements.txt로 재생성)
+.venv/
+__pycache__/
+*.pyc
+
+# PyCharm 개인 설정
+.idea/
+
+# 실제/테스트 소스코드 스냅샷 (git 명령어로 각자 로컬에서 재생성 — README 참고)
+repositories/
+analysis_sources/
+historical_sources/

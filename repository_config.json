@@ -1,0 +1,9 @@
+{
+  "service": "WT",
+  "name": "sampleRepo",
+  "url": "https://github.com/dev2024021/sampleRepo.git",
+  "local_path": "repositories/sampleRepo",
+  "branch": "main",
+  "auth_mode": "anonymous",
+  "source_upload_approved_url": "https://github.com/dev2024021/sampleRepo.git"
+}
