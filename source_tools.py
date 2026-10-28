@@ -185,20 +185,28 @@ def prepare_sources_from_directory(source_dir: Path, commit: str) -> dict:
     commit은 git으로 재검증되지 않는다 — 사용자가 실제로 확인한 커밋 SHA를 그대로
     적어야 한다. prepare_sources()와 달리 git 명령어를 전혀 쓰지 않으므로, 핵심 로직
     (허용/제외 판단·추출·manifest 작성)을 의도적으로 중복시켰다 — 이미 테스트된
-    prepare_sources()를 공용 헬퍼로 쪼개다가 깨뜨릴 위험을 피하기 위함이다."""
+    prepare_sources()를 공용 헬퍼로 쪼개다가 깨뜨릴 위험을 피하기 위함이다.
+
+    분석 영역은 repository_config.json의 name이 아니라 source_dir의 폴더 이름으로
+    분리해서 analysis_sources/<폴더 이름>/에 저장한다 — 이 함수는 "진짜 사내 레포 1개"
+    설정과 무관하게, 과거 이슈별로 서로 다른 소스를 동시에 여러 개 준비해둘 수 있어야
+    하기 때문이다(그래야 뒤에 준비한 게 앞서 준비한 걸 안 덮어쓴다). load_source_tools()
+    호출 시 label로 그 폴더 이름을 지정해 선택한다."""
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("commit은 40자리 16진수 SHA여야 합니다.")
-    config = load_config()
     reject_links(source_dir)
     root = source_dir.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("source_dir은 디렉터리여야 합니다.")
+    label = root.name
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", label):
+        raise ValueError("source_dir의 폴더 이름은 영문, 숫자, 밑줄, 하이픈으로만 구성해야 합니다.")
 
     entries = sorted(path for path in root.rglob("*") if path.is_file())
     if len(entries) > MAX_TREE_ENTRIES:
         raise ValueError("디렉터리 파일 수가 준비 단계의 검사 범위를 초과했습니다.")
 
-    base = PROJECT_DIR / "analysis_sources" / config.name
+    base = PROJECT_DIR / "analysis_sources" / label
     reject_links(base)
     base.mkdir(parents=True, exist_ok=True)
     snapshot_name = commit + "-" + uuid.uuid4().hex[:8]
@@ -240,7 +248,7 @@ def prepare_sources_from_directory(source_dir: Path, commit: str) -> dict:
         total_bytes += len(output)
 
     manifest = {
-        "version": 1, "repository": config.name, "commit": commit,
+        "version": 1, "repository": label, "commit": commit,
         "files": accepted, "excluded_counts": dict(excluded), "total_bytes": total_bytes,
     }
     (snapshot / MANIFEST_NAME).write_text(json_text(manifest), encoding="utf-8")
@@ -250,7 +258,7 @@ def prepare_sources_from_directory(source_dir: Path, commit: str) -> dict:
     temporary_pointer.write_text(json_text({"snapshot": snapshot_name}), encoding="utf-8")
     temporary_pointer.replace(pointer)
     return {
-        "repository": config.name, "commit": commit,
+        "repository": label, "commit": commit,
         "analysis_path": str(snapshot), "accepted_files": len(accepted),
         "excluded_counts": dict(excluded), "total_bytes": total_bytes,
     }
@@ -285,12 +293,19 @@ class SourceTools:
             if path.as_posix() in self.files:
                 raise ValueError("분석 대상 파일이 중복되었습니다.")
             self.files[path.as_posix()] = item["sha256"]
+        # _read() 결과 캐시 — 이 SourceTools 인스턴스(= 분석 세션 1회) 동안만 유효하다.
+        # list_files/search_code가 겹치는 디렉터리를 반복 조회할 때 같은 파일을 디스크에서
+        # 다시 읽고 다시 스캔하지 않게 한다. 세션마다 새 인스턴스를 만들므로, 세션 시작
+        # 이후 파일이 바뀌는 경우(TOCTOU)는 여전히 첫 접근 시 sha256 비교로 잡아낸다.
+        self._read_cache: dict[str, str] = {}
 
     def _read(self, path: str) -> str:
         relative = relative_path(path)
         name = relative.as_posix()
         if not path_allowed(relative) or name not in self.files:
             raise ValueError("허용된 분석 파일이 아닙니다.")
+        if name in self._read_cache:
+            return self._read_cache[name]
         target = self.root.joinpath(*relative.parts)
         reject_links(target)
         if not target.resolve(strict=True).is_relative_to(self.root):
@@ -302,6 +317,7 @@ class SourceTools:
         text = decode_source(data)
         if hashlib.sha256(data).hexdigest() != self.files[name]:
             raise ValueError("분석 파일이 준비 후 변경되었습니다. 다시 준비하세요.")
+        self._read_cache[name] = text
         return text
 
     def _result(self) -> dict:
@@ -370,12 +386,8 @@ class SourceTools:
                 break
         return result
 
-    def list_files(self, path: str = ".") -> dict:
-        directory = relative_path(path, allow_root=True)
-        result = self._result()
-        entries = {}
-        started = time.monotonic()
-        scanned_bytes = 0
+    def _list_one_level(self, directory: PurePosixPath, started: float) -> tuple[dict, bool]:
+        entries: dict[str, str] = {}
         for name in sorted(self.files):
             parts = PurePosixPath(name).parts
             if parts[:len(directory.parts)] != directory.parts:
@@ -384,16 +396,38 @@ class SourceTools:
             if not remaining:
                 raise ValueError("디렉터리를 지정하세요.")
             if time.monotonic() - started > MAX_TOOL_SECONDS:
-                result.update(truncated=True, limit_reason="time")
-                break
-            # 목록도 내용 검사를 통과한 파일만 대상으로 한다.
-            text = self._read(name)
-            scanned_bytes += len(text.encode("utf-8"))
-            if scanned_bytes > MAX_TOTAL_BYTES:
-                result.update(truncated=True, limit_reason="scan_bytes")
-                break
+                return entries, True
+            # 목록도 내용 검사를 통과한 파일만 대상으로 한다(민감정보가 섞인 파일은
+            # 이름조차 노출하지 않음 — 검사 실패 시 예외를 그대로 전파해 목록 전체를
+            # 막는다, fail closed). _read()가 세션 내 캐시를 쓰므로, 겹치는 디렉터리를
+            # 반복 조회해도 이미 읽은 파일은 다시 읽지 않는다.
+            self._read(name)
             child = directory / remaining[0]
             entries[child.as_posix()] = "directory" if len(remaining) > 1 else "file"
+        return entries, False
+
+    def list_files(self, path: str = ".") -> dict:
+        directory = relative_path(path, allow_root=True)
+        started = time.monotonic()
+        truncated = False
+        # 자식이 하나뿐이고 그게 디렉터리면, 갈림길이 나올 때까지 자동으로 더 내려가서
+        # 보여준다 — "src → main → java → com"처럼 선택지 없는 외길 구간에서 모델이
+        # 턴을 하나씩 낭비하지 않게 하기 위함. 잘렸으면(truncated) 그 상태로 멈춘다 —
+        # 일부만 본 결과로 "자식이 하나뿐이다"라고 잘못 판단하면 안 되기 때문이다.
+        while True:
+            entries, truncated = self._list_one_level(directory, started)
+            if truncated:
+                break
+            if len(entries) == 1:
+                ((only_path, only_kind),) = entries.items()
+                if only_kind == "directory":
+                    directory = PurePosixPath(only_path)
+                    continue
+            break
+        result = self._result()
+        result["resolved_path"] = directory.as_posix() if directory.parts else "."
+        if truncated:
+            result.update(truncated=True, limit_reason="time")
         if directory.parts and not entries:
             raise ValueError("허용된 분석 디렉터리가 없습니다.")
         for name, kind in sorted(entries.items()):
@@ -402,19 +436,25 @@ class SourceTools:
         return result
 
 
-def load_source_tools() -> SourceTools:
-    config = load_config()
-    base = PROJECT_DIR / "analysis_sources" / config.name
+def load_source_tools(label: str | None = None) -> SourceTools:
+    """label을 생략하면 repository_config.json의 name(진짜 사내 레포 1개, --sync-repository/
+    --prepare-sources 경로)을 쓴다. label을 주면 그 이름의 analysis_sources/<label>/을
+    대신 읽는다 — prepare_sources_from_directory()로 준비해둔, 서로 독립된 과거 이슈별
+    분석 영역을 선택할 때 쓴다."""
+    if label is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", label):
+        raise ValueError("label은 영문, 숫자, 밑줄, 하이픈으로만 구성해야 합니다.")
+    bucket = label if label is not None else load_config().name
+    base = PROJECT_DIR / "analysis_sources" / bucket
     pointer = base / "current.json"
     reject_links(pointer)
     if not pointer.is_file():
-        raise ValueError("먼저 --prepare-sources를 실행하세요.")
+        raise ValueError("먼저 --prepare-sources 또는 --prepare-sources-from-dir를 실행하세요.")
     if pointer.stat().st_size > 4096:
         raise ValueError("분석 영역 참조 정보가 너무 큽니다.")
     name = json.loads(pointer.read_text(encoding="utf-8"))["snapshot"]
     if not isinstance(name, str) or not re.fullmatch(r"[0-9a-f]{40}-[0-9a-f]{8}", name):
         raise ValueError("분석 영역 참조 정보가 올바르지 않습니다.")
     tools = SourceTools(base / name)
-    if tools.repository != config.name or not name.startswith(tools.commit + "-"):
+    if tools.repository != bucket or not name.startswith(tools.commit + "-"):
         raise ValueError("분석 영역과 저장소 식별 정보가 일치하지 않습니다.")
     return tools

@@ -18,6 +18,13 @@ class IncidentFinding(BaseModel):
     hypothesis_id: Text = Field(description="이 근거가 뒷받침하는 가설의 id (hypotheses 목록 참조)")
     evidence: list[CodeEvidence] = Field(min_length=1, max_length=5)
     suggested_changes: list[Text] = Field(min_length=1, max_length=5, description="가설 확인 후 검토할 수정 방안. 실제 파일 수정은 하지 않는다.")
+    example_code_change: Text | None = Field(
+        default=None,
+        description=(
+            "실제 적용 가능한 수정 코드 초안(선택). 검증되지 않은 예시일 뿐이며 자동으로 "
+            "적용되지 않는다. 확신이 없으면 생략한다."
+        ),
+    )
 
 
 class IncidentReport(BaseModel):
@@ -43,7 +50,11 @@ class IncidentReport(BaseModel):
             raise ValueError("근거가 존재하지 않는 가설 ID를 참조합니다.")
         for finding in self.findings:
             for evidence in finding.evidence:
-                if evidence.end_line < evidence.start_line or evidence.end_line - evidence.start_line >= 100:
+                # read_file 1회 호출은 100줄까지지만, 같은 파일을 여러 번 나눠 읽고
+                # 합쳐서 인용하는 건 정상적인 사용이다(실제로 읽었는지는 validate_evidence()가
+                # 따로 검증한다) — 여기서는 터무니없이 긴 인용(여러 파일을 통째로 베낀
+                # 수준)만 걸러내는 느슨한 상한으로 둔다.
+                if evidence.end_line < evidence.start_line or evidence.end_line - evidence.start_line >= 300:
                     raise ValueError("근거 행 범위가 올바르지 않습니다.")
         return self
 
@@ -65,6 +76,18 @@ hypotheses[].source_search_targets에는 이 가설을 확인하려고 실제로
 키워드나 경로로 다시 탐색한다. 코드를 수정하거나 명령을 실행하지 않으며, 저장소 바깥
 정보도 참조하지 않는다.
 
+search_code는 전체 영역을 대상으로 하면 대형 저장소에서 제한 시간 안에 끝나지 못하고
+중간에 잘릴 수 있다(결과가 비어 있어도 "없다"가 아니라 "다 못 찾았다"는 뜻일 수 있음).
+list_files로 먼저 디렉터리 구조를 파악한 뒤, search_code를 호출할 때는 가능하면 path로
+관련 있어 보이는 하위 디렉터리로 범위를 좁혀서 검색한다.
+
+탐색 시작점은 장애 증상의 성격에 따라 고른다. 화면에 구체적인 오류 메시지나 팝업
+문구가 있으면, 그 문구나 관련 호출을 프론트엔드(JSP/JS 등)에서 먼저 찾아보고 거기서
+호출하는 API나 백엔드 로직으로 거슬러 올라가는 방식을 고려한다 — 사람 개발자가
+증상에서부터 역추적하는 방식과 같다. 반대로 화면에 구체적인 오류 없이 결과만 이상한
+경우(예: 조용히 잘못된 데이터가 나옴)는 백엔드 로직부터 보는 편이 나을 수 있다. 항상
+한쪽만 고집하지 말고, 한쪽에서 근거를 못 찾으면 다른 쪽도 확인한다.
+
 애플리케이션 코드(.java 등)만 보고 탐색을 끝내지 않는다. 원인이 코드가 아니라 설정
 파일(.xml/.properties/.yaml 등 — 보안 정책, 외부 연동, 환경별 설정 등)에 있을 수도
 있으므로, 코드에서 근거를 찾지 못했다면 포기하거나 insufficient_evidence로 결론 내리기
@@ -81,6 +104,11 @@ insufficient_evidence로 하고 findings는 빈 목록으로 한다. 근거가 �
 함께 쓴다. 수정 방안은 가설 확인 후 검토할 제안으로 표현한다. 실제로 존재하지 않는
 클래스나 파일로 단정하지 않는다. 검색 한도, 누락된 소스, 탐색 과정에서의 한계를
 limitations에 작성한다.
+
+findings[].example_code_change는 선택 항목이다. 실제로 읽은 코드와 같은 스타일·위치로
+구체적인 수정 코드 초안을 작성할 자신이 있을 때만 채우고, 확신이 없으면 비워둔다. 이
+코드는 검증되지 않은 예시일 뿐 실제로 적용되지 않으며, 실행하거나 테스트하지 않았다는
+점을 전제로 한다.
 """
 
 

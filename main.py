@@ -1,6 +1,9 @@
 import argparse
 import os
 import re
+import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -8,11 +11,35 @@ from google.auth.exceptions import GoogleAuthError
 from google.genai import errors
 from pydantic import ValidationError
 
-from function_calling_analysis import EvidenceValidationError, analyze_incident_agentic
+from function_calling_analysis import EvidenceValidationError, ReportValidationError, analyze_incident_agentic
 from incident_analysis import analyze_incident, sample_analysis
 from repository_sync import sync_repository
 from source_tools import json_text, load_source_tools, prepare_sources, prepare_sources_from_directory
 from code_analysis import MAX_INCIDENT_BYTES, analyze_code, collect_code, require_source_upload_approval
+
+
+class _TeeStdout:
+    """콘솔과 로그 파일 양쪽에 동시에 출력한다. PowerShell의 Tee-Object/Start-Transcript가
+    이 환경(PyCharm 터미널 통합)에서 한글을 깨뜨리는 문제를 겪어서, 셸에 기대지 않고
+    Python이 직접 UTF-8로 파일에 쓰도록 했다 — 콘솔 인코딩과 완전히 무관해진다."""
+
+    def __init__(self, *streams) -> None:
+        self._streams = streams
+
+    def write(self, data: str) -> None:
+        for stream in self._streams:
+            stream.write(data)
+            stream.flush()
+
+    def flush(self) -> None:
+        for stream in self._streams:
+            stream.flush()
+
+
+CODE_SUGGESTION_DISCLAIMER = (
+    "이 제안 코드는 자동으로 검증·적용되지 않았습니다. 실제 반영 전 개발자가 직접 "
+    "확인하고 테스트해야 합니다."
+)
 
 
 def safe_error_message(message: str, incident_text: str) -> str:
@@ -28,6 +55,27 @@ def safe_error_message(message: str, incident_text: str) -> str:
     message = re.sub(r"\b(?:AIza[\w-]+|ya29\.[\w.-]+)\b", "[인증 값 생략]", message)
     message = re.sub(r'''"[^"\n]*"|'[^'\n]*' ''', "[인용 값 생략]", message, flags=re.VERBOSE)
     return message[:2000]
+
+
+def print_elapsed(started: float) -> float:
+    elapsed = time.monotonic() - started
+    print(f"소요 시간: {elapsed:.1f}초")
+    return elapsed
+
+
+def print_cost_summary(usage) -> None:
+    if usage is None:
+        print("(비용 정보 없음 — 첫 호출 전에 실패했을 가능성이 있습니다)")
+        return
+    cost_text = (
+        f"${usage.estimated_cost_usd:.4f} (추정치, 실제 청구서 기준 아님)"
+        if usage.estimated_cost_usd is not None
+        else "모델 단가 미등록으로 추정 생략 — Google Cloud 결제 콘솔에서 확인하세요."
+    )
+    print(
+        f"호출 {usage.call_count}회 / 입력 {usage.prompt_tokens} 토큰 / "
+        f"출력 {usage.output_tokens} 토큰 / 예상 비용: {cost_text}"
+    )
 
 
 def read_incident_text(path: Path) -> str:
@@ -63,6 +111,7 @@ def main() -> int:
     parser.add_argument("--end-line", type=int, help="읽기 종료 행, 포함")
     parser.add_argument("--commit", help="--prepare-sources-from-dir 전용: 해당 디렉터리의 커밋 SHA(git으로 재검증되지 않음, 직접 확인한 값)")
     parser.add_argument("--issue-file", help="장애 입력 파일 경로. 생략하면 data/its_error1.txt를 사용한다(--analyze-code/--analyze-code-agentic 전용)")
+    parser.add_argument("--source-label", help="분석 영역 선택: --prepare-sources-from-dir로 준비한 폴더 이름(예: issue-before-fix_2). 생략하면 repository_config.json 기준 저장소를 사용한다")
     args = parser.parse_args()
     issue_path = Path(args.issue_file) if args.issue_file else Path(__file__).resolve().parent / "data" / "its_error1.txt"
     if args.prepare_sources_from_dir is not None and args.commit is None:
@@ -85,7 +134,7 @@ def main() -> int:
             elif args.prepare_sources_from_dir is not None:
                 result = prepare_sources_from_directory(Path(args.prepare_sources_from_dir), args.commit)
             else:
-                tools = load_source_tools()
+                tools = load_source_tools(args.source_label)
                 if args.search_code is not None:
                     result = tools.search_code(args.search_code, args.path)
                 elif args.read_file is not None:
@@ -113,6 +162,12 @@ def main() -> int:
         return 0
 
     if args.analyze_code_agentic:
+        log_dir = Path(__file__).resolve().parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        log_path = log_dir / f"{datetime.now():%Y%m%d_%H%M%S}.log"
+        log_file = log_path.open("w", encoding="utf-8")
+        sys.stdout = _TeeStdout(sys.stdout, log_file)
+        print(f"(실행 기록 저장 위치: {log_path})")
         print("=== Vertex Function Calling 기반 장애 분석 (반복 탐색) ===")
         input_path = issue_path
         try:
@@ -123,20 +178,25 @@ def main() -> int:
         print("관련 코드의 근거를 확인하지만 실행 환경의 장애 원인을 확정하지 않습니다.")
         try:
             require_source_upload_approval()
-            tools = load_source_tools()
+            tools = load_source_tools(args.source_label)
         except (OSError, ValueError, RuntimeError, KeyError, TypeError):
             print("분석 준비 실패: 분석 영역과 저장소 소스 전송 승인 설정을 확인하세요.")
             return 1
         print(f"분석 기준: {tools.repository} / {tools.commit}")
         print("Vertex AI 호출 중 (반복 탐색 포함, 시간이 걸릴 수 있습니다)...")
+        started = time.monotonic()
         try:
             report, tool_calls, usage, status = analyze_incident_agentic(incident_text, tools)
-        except ValidationError:
+        except ValidationError as error:
             print("응답 검증 실패: 필수 값, 타입 또는 가설 ID 참조가 올바르지 않습니다.")
+            print_elapsed(started)
+            print_cost_summary(getattr(error, "usage_summary", None))
             return 1
         except EvidenceValidationError as error:
             print(f"분석 실패(인용 검증): {error}")
             print("※ 아래는 검증을 통과하지 못한 미확인 결과입니다 — 신뢰하지 말고 디버깅 참고용으로만 보세요.")
+            print_elapsed(started)
+            print_cost_summary(getattr(error, "usage_summary", None))
             print(json_text({
                 "tool_calls": [
                     {
@@ -148,37 +208,55 @@ def main() -> int:
                 "unvalidated_analysis": error.report.model_dump(),
             }))
             return 1
+        except ReportValidationError as error:
+            print(f"분석 실패(최종 보고서 검증): {error.interpretation}")
+            print("※ 아래는 우리 스키마 검증을 통과하지 못한 원시 응답입니다 — 신뢰하지 말고 참고용으로만 보세요.")
+            print_elapsed(started)
+            print_cost_summary(getattr(error, "usage_summary", None))
+            print(json_text({"unvalidated_raw_report": error.raw_report}))
+            return 1
         except (ValueError, OSError, RuntimeError, KeyError, TypeError) as error:
             print(f"분석 실패: {error}")
+            print_elapsed(started)
+            print_cost_summary(getattr(error, "usage_summary", None))
             return 1
         except GoogleAuthError:
             print("Google 인증에 실패했습니다. ADC 또는 인증 파일 설정을 확인하세요.")
+            print_elapsed(started)
             return 1
         except errors.APIError as error:
             print(f"Vertex AI 호출 실패 (상태 코드: {error.code}).")
             print("서버 오류 설명(값 가림): " + safe_error_message(error.message or "설명 없음", incident_text))
+            print_elapsed(started)
+            print_cost_summary(getattr(error, "usage_summary", None))
             return 1
-        except httpx.HTTPError:
+        except httpx.HTTPError as error:
             print("Vertex AI 통신에 실패했습니다. 네트워크와 프록시 설정을 확인하세요.")
+            print_elapsed(started)
+            print_cost_summary(getattr(error, "usage_summary", None))
             return 1
+        elapsed_seconds = print_elapsed(started)
         print(f"=== 코드 근거 검증 완료 (원인 확정 아님) — 종료 사유: {status.stop_reason} ===")
         if status.retried_for_missed_keywords:
             print("(안내: 선언한 탐색 키워드 중 실행 안 된 게 있어 한 번 더 확인시켰습니다)")
-        cost_text = (
-            f"${usage.estimated_cost_usd:.4f} (추정치, 실제 청구서 기준 아님)"
-            if usage.estimated_cost_usd is not None
-            else "모델 단가 미등록으로 추정 생략 — Google Cloud 결제 콘솔에서 확인하세요."
-        )
-        print(
-            f"호출 {usage.call_count}회(탐색 {status.turns_used}턴) / 입력 {usage.prompt_tokens} 토큰 / "
-            f"출력 {usage.output_tokens} 토큰 / 예상 비용: {cost_text}"
-        )
+        if status.escalated:
+            print(f"(안내: 1차 분석이 불충분해 상위 모델({status.escalation_model})로 재시도했습니다)")
+        if status.stop_reason == "repeated_calls":
+            print("(안내: 모델이 같은 도구 호출을 반복해 턴 낭비를 막기 위해 탐색을 조기 종료했습니다)")
+        has_code_suggestion = any(finding.example_code_change for finding in report.findings)
+        if has_code_suggestion:
+            print(f"*** {CODE_SUGGESTION_DISCLAIMER} ***")
+        print(f"(탐색 {status.turns_used}턴)")
+        print_cost_summary(usage)
         print(json_text({
             "repository": tools.repository, "commit": tools.commit,
+            "elapsed_seconds": round(elapsed_seconds, 1),
             "execution": {
                 "stop_reason": status.stop_reason,
                 "turns_used": status.turns_used,
                 "retried_for_missed_keywords": status.retried_for_missed_keywords,
+                "escalated": status.escalated,
+                "escalation_model": status.escalation_model,
             },
             "tool_calls": [
                 {
@@ -195,6 +273,7 @@ def main() -> int:
                 "total_tokens": usage.total_tokens,
                 "estimated_cost_usd": usage.estimated_cost_usd,
             },
+            "code_suggestion_disclaimer": CODE_SUGGESTION_DISCLAIMER if has_code_suggestion else None,
             "analysis": report.model_dump(),
         }))
         return 0
@@ -210,7 +289,7 @@ def main() -> int:
         print("=== 5단계: 코드 기반 AI 분석 ===")
         try:
             require_source_upload_approval()
-            tools = load_source_tools()
+            tools = load_source_tools(args.source_label)
             if len(incident_text.encode("utf-8")) > MAX_INCIDENT_BYTES:
                 raise ValueError("장애 입력이 16KiB 제한을 초과했습니다.")
         except (OSError, ValueError, RuntimeError, KeyError, TypeError):

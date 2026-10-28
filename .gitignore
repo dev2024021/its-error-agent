@@ -10,3 +10,6 @@ __pycache__/
 repositories/
 analysis_sources/
 historical_sources/
+
+# 분석 실행 로그 (읽은 코드 조각이 그대로 찍힘)
+logs/

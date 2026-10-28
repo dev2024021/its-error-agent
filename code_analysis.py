@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field, WithJsonSchema, model_validator
 
-from incident_analysis import IncidentAnalysis, MODEL_CONFIG, Text
+from incident_analysis import CodeQuote, IncidentAnalysis, MODEL_CONFIG, Text
 from source_tools import SourceTools
 from repository_sync import PROJECT_DIR, load_config
 
@@ -30,7 +30,7 @@ class CodeEvidence(BaseModel):
     path: Text = Field(description="전달된 코드의 상대 파일 경로")
     start_line: LineNumber
     end_line: LineNumber
-    quote: Text = Field(description="해당 행 범위의 코드를 줄바꿈을 유지하여 그대로 인용")
+    quote: CodeQuote = Field(description="해당 행 범위의 코드를 줄바꿈을 유지하여 그대로 인용")
     explanation: Text = Field(description="이 코드가 가설을 뒷받침하는 이유와 한계")
 
 

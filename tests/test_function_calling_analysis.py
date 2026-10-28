@@ -227,5 +227,36 @@ class MissedKeywordDetectionTests(unittest.TestCase):
         self.assertEqual(fc._declared_search_keywords(report), ["CSP", "child-src"])
 
 
+class MergeUsageTests(unittest.TestCase):
+    """escalation 시 1차·2차 모델의 사용량을 합산하는 _merge_usage()가 토큰은 항상
+    더하고, 비용은 두 모델 단가를 다 아는 경우에만 더하는지 확인한다."""
+
+    def test_tokens_and_cost_are_summed_when_both_models_priced(self):
+        usage1 = fc.UsageTracker("gemini-3.1-flash-lite")
+        usage1.call_count, usage1.prompt_tokens, usage1.output_tokens, usage1.total_tokens = 2, 1000, 200, 1200
+        usage2 = fc.UsageTracker("gemini-3.8-flash")
+        usage2.call_count, usage2.prompt_tokens, usage2.output_tokens, usage2.total_tokens = 3, 2000, 400, 2400
+
+        merged = fc._merge_usage(usage1, usage2)
+
+        self.assertEqual(merged.call_count, 5)
+        self.assertEqual(merged.prompt_tokens, 3000)
+        self.assertEqual(merged.output_tokens, 600)
+        self.assertEqual(merged.total_tokens, 3600)
+        self.assertAlmostEqual(merged.estimated_cost_usd, usage1.estimated_cost_usd() + usage2.estimated_cost_usd())
+        self.assertIn("escalated", merged.model)
+
+    def test_cost_is_none_when_either_model_unpriced(self):
+        usage1 = fc.UsageTracker("gemini-3.1-flash-lite")
+        usage1.call_count, usage1.prompt_tokens, usage1.output_tokens, usage1.total_tokens = 1, 100, 10, 110
+        usage2 = fc.UsageTracker("unknown-model")
+        usage2.call_count, usage2.prompt_tokens, usage2.output_tokens, usage2.total_tokens = 1, 100, 10, 110
+
+        merged = fc._merge_usage(usage1, usage2)
+
+        self.assertIsNone(merged.estimated_cost_usd)
+        self.assertEqual(merged.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

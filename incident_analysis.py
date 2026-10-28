@@ -15,6 +15,14 @@ Keyword = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
     WithJsonSchema({"type": "string"}),
 ]
+# 근거 인용 코드 전용 — 여러 번 나눠 읽은 코드를 합쳐서 인용할 수 있어 Text(1000자)보다
+# 훨씬 길어질 수 있다. 300줄짜리 코드도 담을 수 있게 넉넉히 둔다(완전히 무제한은 아님 —
+# 터무니없이 긴 인용은 여전히 막는다).
+CodeQuote = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000),
+    WithJsonSchema({"type": "string"}),
+]
 
 
 def simplify_generation_schema(schema: dict) -> None:

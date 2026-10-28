@@ -57,11 +57,11 @@ $env:GOOGLE_GENAI_USE_VERTEXAI = "true"
 # 저장소 준비 (둘 중 하나)
 .\.venv\Scripts\python.exe .\main.py --sync-repository          # 익명 Git Clone
 .\.venv\Scripts\python.exe .\main.py --prepare-sources
-# 또는: .git 없이 받은 로컬 소스 사용
+# 또는: .git 없이 받은 로컬 소스 사용 (분석 영역은 <경로>의 폴더 이름으로 독립 저장됨)
 .\.venv\Scripts\python.exe .\main.py --prepare-sources-from-dir <경로> --commit <SHA>
 
-# 분석 실행 (실제 과금됨)
-.\.venv\Scripts\python.exe .\main.py --analyze-code-agentic --issue-file issues\<파일>.txt
+# 분석 실행 (실제 과금됨). --prepare-sources-from-dir로 준비했다면 --source-label로 선택
+.\.venv\Scripts\python.exe .\main.py --analyze-code-agentic --issue-file issues\<파일>.txt --source-label <경로의 폴더 이름>
 
 # 테스트
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
@@ -79,6 +79,9 @@ $env:GOOGLE_GENAI_USE_VERTEXAI = "true"
 > 넘기면 된다. `repositories/`·`analysis_sources/`·`historical_sources/`는
 > `.gitignore`에 들어있어 GitHub에는 올라가지 않으므로, 이 과정은 팀원마다 각자
 > 로컬에서 반복해야 한다.
+>
+> 과거 이슈 여러 건을 동시에 준비해도 서로 안 덮어쓴다 — `analysis_sources/<폴더 이름>/`로
+> 각각 독립 저장되며, 분석할 때 `--source-label <폴더 이름>`으로 어느 걸 쓸지 고른다.
 
 **PyCharm에서는** Run Configuration의 Script parameters에 옵션을, Environment variables에
 아래를 세미콜론(`;`)으로 구분해서 넣고 실행합니다(그대로 복사해서 `GOOGLE_CLOUD_PROJECT`만
@@ -136,7 +139,8 @@ PYTHONUNBUFFERED=1;GOOGLE_GENAI_USE_VERTEXAI=TRUE;GOOGLE_CLOUD_PROJECT=<자신�
   분리해서 아직 손 안 댐.
 
 > 자세한 실행 기록은 `261022_agentic-analysis-devlog.md`, 세션별 인수인계 로그는
-> `HANDOFF.md`, 4단계 소스 탐색 도구 상세는 `SOURCE_TOOLS.md` 참고.
+> `HANDOFF.md`, 4단계 소스 탐색 도구 상세는 `SOURCE_TOOLS.md`, ITS 트리거 자동화 때
+> 필요해질 저장소 인증 방식(Deploy Key) 설계 메모는 `REPOSITORY_AUTH.md` 참고.
 
 ## 7. 디렉터리 가이드
 

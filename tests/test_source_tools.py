@@ -42,8 +42,28 @@ class SourceToolsTests(unittest.TestCase):
         self.assertEqual(tools.search_code("not_present")["results"], [])
         self.assertEqual(tools.search_code("Auth", "src/Auth.java")["results"][0]["line"], 1)
         self.assertEqual(tools.read_file("src/View.jsp", 2, 2)["results"][0]["text"], "<iframe></iframe>")
-        self.assertEqual(tools.list_files()["results"], [{"path": "src", "kind": "directory"}])
+        # 루트는 자식이 "src" 하나뿐이라, 갈림길이 나오는 src 안까지 자동으로 내려가서 보여준다.
+        root_listing = tools.list_files()
+        self.assertEqual(root_listing["resolved_path"], "src")
+        self.assertEqual(
+            sorted(root_listing["results"], key=lambda item: item["path"]),
+            [{"path": "src/Auth.java", "kind": "file"}, {"path": "src/View.jsp", "kind": "file"}],
+        )
         self.assertEqual(len(tools.list_files("src")["results"]), 2)
+
+    def test_list_files_skips_single_child_directory_chains(self):
+        """src/main/java/com처럼 갈림길 없는 외길 디렉터리 체인은, 실제로 선택지가
+        갈리는 지점(여기서는 com 밑에 a/b 두 패키지)까지 한 번의 호출로 건너뛴다."""
+        tools = self.tools({
+            "src/main/java/com/a/Foo.java": "class Foo {}",
+            "src/main/java/com/b/Bar.java": "class Bar {}",
+        })
+        result = tools.list_files()
+        self.assertEqual(result["resolved_path"], "src/main/java/com")
+        self.assertEqual(
+            sorted(item["path"] for item in result["results"]),
+            ["src/main/java/com/a", "src/main/java/com/b"],
+        )
 
     def test_arbitrary_paths_are_rejected(self):
         tools = self.tools({"Safe.java": "class Safe {}"})
@@ -189,7 +209,8 @@ class SourceToolsTests(unittest.TestCase):
             with patch.object(source, "PROJECT_DIR", self.root), patch.object(source, "load_config", return_value=config), patch.object(source, "ALLOWED_EXTENSIONS", source.ALLOWED_EXTENSIONS | {".properties"}):
                 result = source.prepare_sources_from_directory(source_dir, COMMIT)
                 self.assertEqual(result["accepted_files"], 1)
-                tools = source.load_source_tools()
+                self.assertEqual(result["repository"], source_dir.name)
+                tools = source.load_source_tools(label=source_dir.name)
                 self.assertEqual(tools.read_file("src/Safe.java", 1, 1)["results"][0]["text"], "class Safe {}")
             snapshot = Path(result["analysis_path"])
             all_data = b"".join(path.read_bytes() for path in snapshot.rglob("*") if path.is_file())
@@ -198,6 +219,24 @@ class SourceToolsTests(unittest.TestCase):
             self.assertFalse((snapshot / ".git").exists())
             self.assertFalse((snapshot / "src/config/globals.properties").exists())
             self.assertFalse((snapshot / "src/config/GLOBALS2.PROPERTIES").exists())
+
+    def test_prepare_from_directory_labels_dont_collide(self):
+        """서로 다른 source_dir 이름으로 두 번 prepare하면 각자 독립된
+        analysis_sources/<폴더 이름>/current.json을 가져서, 뒤에 준비한 쪽이 앞서
+        준비한 쪽의 분석 대상을 밀어내지 않아야 한다."""
+        with tempfile.TemporaryDirectory() as first_name, tempfile.TemporaryDirectory() as second_name:
+            first_dir, second_dir = Path(first_name), Path(second_name)
+            (first_dir / "First.java").write_text("class First {}", encoding="utf-8")
+            (second_dir / "Second.java").write_text("class Second {}", encoding="utf-8")
+
+            with patch.object(source, "PROJECT_DIR", self.root):
+                source.prepare_sources_from_directory(first_dir, COMMIT)
+                source.prepare_sources_from_directory(second_dir, COMMIT)
+
+                first_tools = source.load_source_tools(label=first_dir.name)
+                second_tools = source.load_source_tools(label=second_dir.name)
+                self.assertEqual(first_tools.read_file("First.java", 1, 1)["results"][0]["text"], "class First {}")
+                self.assertEqual(second_tools.read_file("Second.java", 1, 1)["results"][0]["text"], "class Second {}")
 
     def test_prepare_from_directory_rejects_bad_commit_and_missing_dir(self):
         with tempfile.TemporaryDirectory() as source_name:
